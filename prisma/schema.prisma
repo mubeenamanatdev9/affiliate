@@ -1,0 +1,306 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  password      String?   // For credentials-based auth
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  favorites     Favorite[]
+  clicks        Click[]
+  alerts        Alert[]
+  activityLogs  ActivityLog[]
+}
+
+model Affiliate {
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  email         String?
+  website       String?
+  logo          String?
+  description   String?   @db.Text
+  network       AffiliateNetwork @default(DIRECT)
+  networkApiKey String?   // Encrypted API key for network integration
+  commissionType CommissionType @default(CPS)
+  commissionRate Float     // e.g., 5.5 = 5.5%
+  cookieDuration Int       @default(30) // days
+  paymentMethod String?    // PayPal, Wire, etc.
+  paymentEmail  String?
+  status        AffiliateStatus @default(ACTIVE)
+  isFeatured    Boolean   @default(false)
+  clicks        Click[]
+  conversions   Conversion[]
+  coupons       Coupon[]
+  products      Product[]
+  stores        Store[]
+  notes         String?   @db.Text
+  totalClicks   Int       @default(0)
+  totalRevenue  Float     @default(0)
+  totalPaid     Float     @default(0)
+  balanceDue    Float     @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([slug])
+  @@index([status])
+  @@index([network])
+}
+
+model Store {
+  id            String    @id @default(cuid())
+  slug          String    @unique
+  name          String
+  logo          String?
+  description   String?   @db.Text
+  website       String
+  affiliateId   String?
+  affiliate     Affiliate? @relation(fields: [affiliateId], references: [id], onDelete: SetNull)
+  commissionRate Float?
+  isFeatured    Boolean   @default(false)
+  products      Product[]
+  coupons       Coupon[]
+  createdAt     DateTime  @default(now())
+
+  @@index([slug])
+  @@index([isFeatured])
+  @@index([affiliateId])
+}
+
+model Category {
+  id            String    @id @default(cuid())
+  slug          String    @unique
+  name          String
+  description   String?   @db.Text
+  image         String?
+  parentId      String?
+  parent        Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children      Category[] @relation("CategoryHierarchy")
+  products      Product[]
+  coupons       Coupon[]
+
+  @@index([slug])
+}
+
+model Product {
+  id            String    @id @default(cuid())
+  slug          String    @unique
+  name          String
+  description   String?   @db.Text
+  image         String?
+  originalPrice Float?
+  salePrice     Float?
+  currency      String    @default("USD")
+  storeId       String
+  store         Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  categoryId    String?
+  category      Category? @relation(fields: [categoryId], references: [id])
+  affiliateId   String?
+  affiliate     Affiliate? @relation(fields: [affiliateId], references: [id], onDelete: SetNull)
+  coupons       Coupon[]
+  clicks        Click[]
+  isFeatured    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  seoTitle      String?
+  seoDesc       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([slug])
+  @@index([storeId])
+  @@index([categoryId])
+  @@index([affiliateId])
+  @@index([isFeatured])
+  @@index([isActive])
+}
+
+model Coupon {
+  id            String    @id @default(cuid())
+  code          String?
+  title         String
+  description   String?   @db.Text
+  discountType  DiscountType @default(PERCENTAGE)
+  discountValue Float?
+  minPurchase   Float?
+  maxDiscount   Float?
+  affiliateUrl  String    @db.Text
+  productId     String?
+  product       Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  storeId       String
+  store         Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  categoryId    String?
+  category      Category? @relation(fields: [categoryId], references: [id])
+  affiliateId   String?
+  affiliate     Affiliate? @relation(fields: [affiliateId], references: [id], onDelete: SetNull)
+  clicks        Click[]
+  conversions   Conversion[]
+  favorites     Favorite[]
+  startDate     DateTime  @default(now())
+  endDate       DateTime?
+  isVerified    Boolean   @default(true)
+  isFeatured    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  usageCount    Int       @default(0)
+  successRate   Float     @default(0)
+  seoTitle      String?
+  seoDesc       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([storeId])
+  @@index([productId])
+  @@index([categoryId])
+  @@index([affiliateId])
+  @@index([isActive])
+  @@index([isFeatured])
+  @@index([endDate])
+  @@index([code])
+}
+
+model Click {
+  id            String    @id @default(cuid())
+  couponId      String?
+  coupon        Coupon?   @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  productId     String?
+  product       Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  affiliateId   String?
+  affiliate     Affiliate? @relation(fields: [affiliateId], references: [id], onDelete: SetNull)
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ipAddress     String?
+  userAgent     String?
+  referrer      String?
+  country       String?
+  device        String?
+  isUnique      Boolean   @default(true) // deduplicated per 24h
+  createdAt     DateTime  @default(now())
+
+  @@index([couponId])
+  @@index([productId])
+  @@index([affiliateId])
+  @@index([createdAt])
+  @@index([isUnique])
+}
+
+model Conversion {
+  id            String    @id @default(cuid())
+  clickId       String    @unique
+  couponId      String?
+  coupon        Coupon?   @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  affiliateId   String?
+  affiliate     Affiliate? @relation(fields: [affiliateId], references: [id], onDelete: SetNull)
+  orderValue    Float?
+  commission    Float?
+  currency      String    @default("USD")
+  status        ConversionStatus @default(PENDING)
+  merchantRef   String?   // Order ID from merchant
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([affiliateId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Favorite {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  couponId      String
+  coupon        Coupon    @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+
+  @@unique([userId, couponId])
+}
+
+model Alert {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storeId       String?
+  categoryId    String?
+  minDiscount   Float?
+  emailEnabled  Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+}
+
+model ActivityLog {
+  id            String    @id @default(cuid())
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action        String    // e.g., "affiliate_created", "coupon_updated"
+  entityType    String    // "affiliate", "coupon", "store"
+  entityId      String?
+  details       Json?     // Flexible metadata
+  ipAddress     String?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Subscriber {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  createdAt     DateTime  @default(now())
+
+  @@index([email])
+}
+
+enum Role {
+  USER
+  ADMIN
+  EDITOR
+}
+
+enum AffiliateNetwork {
+  DIRECT
+  CJ
+  IMPACT
+  SHAREASALE
+  AMAZON_ASSOCIATES
+  AWIN
+  RAKUTEN
+  OTHER
+}
+
+enum AffiliateStatus {
+  ACTIVE
+  PAUSED
+  PENDING
+  REJECTED
+  TERMINATED
+}
+
+enum CommissionType {
+  CPS        // Cost Per Sale
+  CPA        // Cost Per Action
+  CPC        // Cost Per Click
+  CPL        // Cost Per Lead
+  REVENUE_SHARE
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+  FREE_SHIPPING
+  BOGO
+}
+
+enum ConversionStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  PAID
+}
